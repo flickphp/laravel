@@ -1,0 +1,169 @@
+# Flick Laravel
+
+> Laravel integration for Flick form library. Auto-configures request, session, validation, and CSRF adapters.
+
+Free and open source (MIT).
+
+## Installation
+
+```shell
+composer require flickphp/laravel
+```
+
+Auto-registers via Laravel's package discovery. No manual provider registration needed.
+
+## Configuration
+
+```shell
+php artisan vendor:publish --tag=flick-config
+```
+
+Creates config/flick.php:
+
+```php
+return [
+    'views' => 'tailwind',        // Form template: flick, bootstrap, bulma, tailwind, foundation, materialize
+    'csrf' => false,              // false = use Laravel's CSRF (recommended), true = use Flick's built-in
+    'honeypot' => 'website_url',  // Spam protection field name, null to disable
+    'sessionAutoStart' => false,  // false = let Laravel manage sessions (recommended)
+    'echo' => false,              // false = return strings for {!! !!} in Blade (recommended)
+];
+```
+
+## What It Does
+
+The service provider sets default adapters so any `new Flick()` automatically uses Laravel's HTTP layer:
+
+- LaravelRequest - Wraps Illuminate\Http\Request for POST, GET, FILES, cookies, headers
+- LaravelSession - Wraps Laravel's session store, namespaced under 'flick' key to avoid conflicts
+- LaravelValidationDelegate - Delegates unrecognized validation rules to Laravel's Validator
+- CSRF token generator - Uses Laravel's csrf_token() instead of Flick's built-in CSRF
+
+All adapters are registered as singletons in the service container.
+
+## Usage
+
+### In Controllers
+
+```php
+use Flick\Flick;
+
+class ContactController extends Controller
+{
+    public function show()
+    {
+        $form = new Flick(config('flick'));
+        return view('contact', ['form' => $form]);
+    }
+
+    public function store()
+    {
+        $form = new Flick(config('flick'));
+
+        if ($form->submitted()) {
+            $data = $form->request('Name, Email, Message|textarea');
+
+            if ($form->ok()) {
+                return redirect()->back()->with('success', 'Message sent!');
+            }
+        }
+
+        return view('contact', ['form' => $form]);
+    }
+}
+```
+
+### In Blade Views
+
+```php
+{!! $form->open('/contact', 'POST') !!}
+    {!! $form->text('name', 'Name', '', ['rules' => 'required']) !!}
+    {!! $form->email('email', 'Email', '', ['rules' => 'required,email']) !!}
+    {!! $form->textarea('message', 'Message', '', ['rules' => 'required']) !!}
+    {!! $form->submit('Send Message') !!}
+{!! $form->close() !!}
+```
+
+### Using the Facade
+
+```php
+use Flick\Laravel\Facades\Flick;
+
+$form = Flick::make();
+$form = Flick::make(['views' => 'bootstrap']);
+```
+
+Each call to make() returns a new independent Flick instance. Config from config/flick.php is merged automatically.
+
+## Laravel Validation Rules
+
+Flick checks its native rules first, then delegates unrecognized rules to Laravel's Validator.
+
+Priority order:
+1. Flick native rules (required, email, min, max, alpha, alphaDash, etc.) - handled by Flick
+2. Laravel-specific rules (exists, unique, confirmed, different, etc.) - delegated to Laravel
+
+### Database Rules
+
+```php
+$form->text('email', 'Email', '', ['rules' => 'required,email,unique:users,email']);
+$form->select('category_id', 'Category', '', [
+    'options' => ['1' => 'News', '2' => 'Sports'],
+    'rules' => 'required,exists:categories,id',
+]);
+```
+
+### Cross-Field Validation
+
+```php
+$form->password('password', 'Password', '', ['rules' => 'required,min:8,confirmed']);
+$form->password('password_confirmation', 'Confirm Password');
+```
+
+### Mixing Flick and Laravel Rules
+
+```php
+$form->text('username', 'Username', '', ['rules' => 'required,alphaDash,unique:users,username']);
+```
+
+### Custom Error Messages
+
+```php
+$form->text('email', 'Email', '', [
+    'rules' => 'required,unique:users,email',
+    'messages' => [
+        'required' => 'Please enter your email address.',
+        'unique' => 'This email is already registered.',
+    ],
+]);
+```
+
+## CSRF Protection
+
+Laravel's CSRF token is auto-injected into forms. The default config ('csrf' => false) tells Flick to use Laravel's csrf_token() instead of its own. You do NOT need @csrf in Blade - Flick handles it:
+
+```php
+{!! $form->open('/contact', 'POST') !!}
+    {{-- CSRF token auto-injected --}}
+    {!! $form->text('name', 'Name') !!}
+    {!! $form->submit() !!}
+{!! $form->close() !!}
+```
+
+For PUT/PATCH/DELETE method spoofing, use a raw HTML form with @csrf and @method instead of $form->open().
+
+## Gotchas
+
+1. Use {!! !!} not {{ }} in Blade - Flick returns raw HTML, double-curly would escape it
+2. 'echo' => false is required for Blade - Otherwise output is echoed instead of returned
+3. 'csrf' => false means use Laravel's CSRF, not "disable CSRF" - Naming is counterintuitive
+4. 'sessionAutoStart' => false is correct for Laravel - Laravel manages sessions via middleware
+5. Each new Flick() is independent - Adapters are shared, but form state is per-instance
+6. $form->open() auto-includes CSRF token - Do not add @csrf inside Flick forms
+7. PUT/PATCH/DELETE need raw forms - Flick's open() always generates POST, use @method for spoofing
+8. Session data namespaced under 'flick' key - Won't conflict with your application session data
+
+## Links
+
+- Documentation: https://flickphp.com
+- GitHub: https://github.com/flickphp/laravel
