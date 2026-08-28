@@ -40,7 +40,8 @@
   "config": {
     "allow-plugins": {
       "pestphp/pest-plugin": true
-    }
+    },
+    "notify-on-install": false
   },
   "extra": {
     "laravel": {
